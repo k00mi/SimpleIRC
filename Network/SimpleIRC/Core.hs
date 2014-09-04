@@ -151,8 +151,8 @@ connect :: IrcConfig       -- ^ Configuration
            -> Bool         -- ^ Print debug messages
            -> IO (Either IOError MIrc) -- ^ IrcServer instance
 connect config threaded debug = try $ do
-  (when debug $
-    B.putStrLn $ "Connecting to " `B.append` B.pack (cAddr config))
+  when debug $
+    B.putStrLn $ "Connecting to " `B.append` B.pack (cAddr config)
 
   h <- connectTo (cAddr config) (PortNumber $ fromIntegral $ cPort config)
   hSetBuffering h NoBuffering
@@ -260,7 +260,7 @@ execCmdsLoop mIrc = do
   cmd <- readChan $ sCmdChan server
   case cmd of (SIrcAddEvent uEvent)     -> do
                 _ <- swapMVar mIrc (server {sEvents =
-                  (uncurry Map.insert uEvent) (sEvents server)})
+                  uncurry Map.insert uEvent (sEvents server)})
                 execCmdsLoop mIrc
               (SIrcChangeEvents evts) -> do
                 _ <- swapMVar mIrc (server {sEvents = evts})
@@ -278,11 +278,11 @@ listenLoop s = do
   let h = fromJust $ sSock server
   eof <- timeout (sPingTimeoutInterval server) (hIsEOF h)
         `catch`
-         (\e -> Nothing <$ (debugWrite server $ B.pack $
+         (\e -> Nothing <$ (debugWrite server . B.pack $
                               "listenLoop: " ++ show (e :: IOException)))
 
   -- If EOF then we are disconnected
-  if (eof /= Just False)
+  if eof /= Just False
     then do
       modifyMVar_ s (\serv -> return $ serv {sSock = Nothing})
       Foldable.mapM_ (callDisconnectFunction s) (sEvents server)
@@ -292,14 +292,14 @@ listenLoop s = do
       server1 <- takeMVar s
 
       -- Print the received line.
-      debugWrite server1 $ (B.pack ">> ") `B.append` line
+      debugWrite server1 $ B.pack ">> " `B.append` line
 
       -- Call the internal events
       newServ <- foldM (\sr f -> f sr (parse line)) server1 internalEvents
 
       putMVar s newServ -- Put the MVar back.
 
-      let parsed = (parse line)
+      let parsed = parse line
       -- Call the events
       callEvents s parsed
 
@@ -338,7 +338,7 @@ trackChanges server msg
     let nick = fromJust $ mNick msg
         chan  = mMsg msg
     if nick == sNickname server
-      then return server { sChannels = chan:(sChannels server) }
+      then return server { sChannels = chan : sChannels server }
       else return server
   | code == "NICK" = do
     let nick    = fromJust $ mNick msg
@@ -347,7 +347,7 @@ trackChanges server msg
       then return server { sNickname = newNick }
       else return server
   | code == "KICK" = do
-    let nick = (fromJust $ mOther msg) !! 0
+    let nick = head $ fromJust $ mOther msg
         chan = fromJust $ mChan msg
     if nick == sNickname server
       then return server { sChannels = delete chan (sChannels server) }
@@ -377,10 +377,9 @@ ctcpHandler mServ iMsg
 
     time <- sCTCPTime server
     sendCmd mServ
-      (MNotice origin ("\x01TIME " `B.append`
-        (B.pack time) `B.append` "\x01"))
-  | "\x01PING " `B.isPrefixOf` msg = do
+      (MNotice origin ("\x01TIME " `B.append` B.pack time `B.append` "\x01"))
 
+  | "\x01PING " `B.isPrefixOf` msg =
     sendCmd mServ
       (MNotice origin msg)
 
@@ -393,7 +392,7 @@ events mServ event msg = do
   server <- readMVar mServ
   let comp   = (`eqEvent` event)
       evts = Map.filter comp (sEvents server)
-      eventCall = (\obj -> (eventFunc $ snd obj) mServ msg)
+      eventCall obj = eventFunc (snd obj) mServ msg
 
   mapM_ eventCall (Map.toList evts)
 
@@ -490,7 +489,7 @@ sendMsg mServ chan msg =
   where lins = B.lines msg
         s m = do
           now <- getCurrentTime
-          stamp <- (getFloodControlTimestamp mServ)
+          stamp <- getFloodControlTimestamp mServ
           let latest = addUTCTime 2 $ max now stamp
               diff = diffUTCTime latest now
           setFloodControlTimestamp mServ latest
@@ -527,7 +526,7 @@ remEvent mIrc uniq = do
 
 debugWrite :: IrcServer -> B.ByteString -> IO ()
 debugWrite s msg =
-  (when (sDebug s) $ B.putStrLn msg)
+  when (sDebug s) $ B.putStrLn msg
 
 write :: IrcServer -> B.ByteString -> IO ()
 write s msg = do
