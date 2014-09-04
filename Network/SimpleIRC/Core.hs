@@ -47,11 +47,12 @@ import System.IO
 import Data.Maybe
 import Data.List (delete)
 import Data.Char (isNumber)
+import Control.Applicative ((<$))
 import Control.Monad
 import Control.Concurrent
 import Network.SimpleIRC.Messages
 import Data.Unique
-import Control.Exception (try)
+import Control.Exception (try, catch, IOException)
 import System.Timeout
 import Data.Time
 import System.Locale
@@ -275,7 +276,10 @@ listenLoop s = do
   server <- readMVar s
 
   let h = fromJust $ sSock server
-  eof <- timeout (sPingTimeoutInterval server) $ hIsEOF h
+  eof <- timeout (sPingTimeoutInterval server) (hIsEOF h)
+        `catch`
+         (\e -> Nothing <$ (debugWrite server $ B.pack $
+                              "listenLoop: " ++ show (e :: IOException)))
 
   -- If EOF then we are disconnected
   if (eof /= Just False)
