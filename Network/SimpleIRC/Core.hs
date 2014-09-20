@@ -255,20 +255,20 @@ greetServer server = do
         addr = sAddr server
 
 execCmdsLoop :: MIrc -> IO ()
-execCmdsLoop mIrc = do
-  server <- readMVar mIrc
-  cmd <- readChan $ sCmdChan server
-  case cmd of (SIrcAddEvent uEvent)     -> do
-                _ <- swapMVar mIrc (server {sEvents =
+execCmdsLoop mIrc = forever $ catch
+  (do server <- readMVar mIrc
+      cmd <- readChan $ sCmdChan server
+      void $ case cmd of
+              SIrcAddEvent uEvent ->
+                swapMVar mIrc (server {sEvents =
                   uncurry Map.insert uEvent (sEvents server)})
-                execCmdsLoop mIrc
-              (SIrcChangeEvents evts) -> do
-                _ <- swapMVar mIrc (server {sEvents = evts})
-                execCmdsLoop mIrc
-              (SIrcRemoveEvent key)     -> do
-                _ <- swapMVar mIrc (server {sEvents =
-                  Map.delete key (sEvents server)})
-                execCmdsLoop mIrc
+              SIrcChangeEvents evts ->
+                swapMVar mIrc (server {sEvents = evts})
+              SIrcRemoveEvent key ->
+                swapMVar mIrc (server {sEvents =
+                  Map.delete key (sEvents server)}))
+  (\e -> do s <- readMVar mIrc
+            debugWrite s $ B.pack $ "execCmdsLoop: " ++ show (e :: IOException))
 
 
 listenLoop :: MIrc -> IO ()
