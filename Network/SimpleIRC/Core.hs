@@ -273,7 +273,7 @@ listenLoop mIrc = do
   if eof /= Just False
     then do
       modifyMVar_ mIrc (\serv -> return $ serv {sSock = Nothing})
-      Foldable.mapM_ (callDisconnectFunction mIrc) (sEvents server)
+      Foldable.mapM_ callDisconnectFunction (sEvents server)
     else do
       line <- B.hGetLine h
       server1 <- takeMVar mIrc
@@ -289,8 +289,8 @@ listenLoop mIrc = do
       events mIrc (RawMsg undefined) parsed
       listenLoop mIrc
   where
-    callDisconnectFunction mIrc (Disconnect f) = f mIrc
-    callDisconnectFunction _ _ = return ()
+    callDisconnectFunction (Disconnect f) = f mIrc
+    callDisconnectFunction _ = return ()
 
 -- Internal Events - They can edit the server
 joinChans :: IrcServer -> IrcMessage -> IO IrcServer
