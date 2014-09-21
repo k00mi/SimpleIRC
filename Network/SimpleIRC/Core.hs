@@ -262,8 +262,8 @@ execCmdsLoop mIrc = forever $ catch
 
 
 listenLoop :: MIrc -> IO ()
-listenLoop s = do
-  server <- readMVar s
+listenLoop mIrc = do
+  server <- readMVar mIrc
   let h = fromJust $ sSock server
   eof <- timeout (sPingTimeoutInterval server) (hIsEOF h)
         `catch`
@@ -272,22 +272,22 @@ listenLoop s = do
   -- If EOF then we are disconnected
   if eof /= Just False
     then do
-      modifyMVar_ s (\serv -> return $ serv {sSock = Nothing})
-      Foldable.mapM_ (callDisconnectFunction s) (sEvents server)
+      modifyMVar_ mIrc (\serv -> return $ serv {sSock = Nothing})
+      Foldable.mapM_ (callDisconnectFunction mIrc) (sEvents server)
     else do
       line <- B.hGetLine h
-      server1 <- takeMVar s
+      server1 <- takeMVar mIrc
       -- Print the received line.
       debugWrite server1 $ B.pack ">> " `B.append` line
       -- Call the internal events
       newServ <- foldM (\sr f -> f sr (parse line)) server1 internalEvents
-      putMVar s newServ -- Put the MVar back.
+      putMVar mIrc newServ -- Put the MVar back.
       let parsed = parse line
       -- Call the events
-      callEvents s parsed
+      callEvents mIrc parsed
       -- Call the RawMsg Events.
-      events s (RawMsg undefined) parsed
-      listenLoop s
+      events mIrc (RawMsg undefined) parsed
+      listenLoop mIrc
   where
     callDisconnectFunction mIrc (Disconnect f) = f mIrc
     callDisconnectFunction _ _ = return ()
@@ -342,46 +342,46 @@ trackChanges server msg
 
 -- Internal normal events
 ctcpHandler :: EventFunc
-ctcpHandler mServ iMsg
+ctcpHandler mIrc iMsg
   | msg == "\x01VERSION\x01" = do
-      server <- readMVar mServ
-      sendCmd mServ
+      server <- readMVar mIrc
+      sendCmd mIrc
         (MNotice origin ("\x01VERSION " `B.append`
           B.pack (sCTCPVersion server) `B.append` "\x01"))
   | msg == "\x01TIME\x01" = do
-      server <- readMVar mServ
+      server <- readMVar mIrc
       time <- sCTCPTime server
-      sendCmd mServ
+      sendCmd mIrc
         (MNotice origin ("\x01TIME " `B.append` B.pack time `B.append` "\x01"))
-  | "\x01PING " `B.isPrefixOf` msg = sendCmd mServ (MNotice origin msg)
+  | "\x01PING " `B.isPrefixOf` msg = sendCmd mIrc (MNotice origin msg)
   | otherwise = return ()
   where msg    = mMsg iMsg
         origin = fromJust $ mOrigin iMsg
 
 -- Event code
 events :: MIrc -> IrcEvent -> IrcMessage -> IO ()
-events mServ event msg = do
-  server <- readMVar mServ
+events mIrc event msg = do
+  server <- readMVar mIrc
   let comp   = (`eqEvent` event)
       evts = Map.filter comp (sEvents server)
-      eventCall obj = eventFunc (snd obj) mServ msg
+      eventCall obj = eventFunc (snd obj) mIrc msg
   mapM_ eventCall (Map.toList evts)
 
 
 callEvents :: MIrc -> IrcMessage -> IO ()
-callEvents mServ msg
-  | mCode msg == "PRIVMSG"     = events mServ (Privmsg undefined) msg
-  | mCode msg == "PING"        = events mServ (Ping undefined) msg
-  | mCode msg == "JOIN"        = events mServ (Join undefined) msg
-  | mCode msg == "PART"        = events mServ (Part undefined) msg
-  | mCode msg == "MODE"        = events mServ (Mode undefined) msg
-  | mCode msg == "TOPIC"       = events mServ (Topic undefined) msg
-  | mCode msg == "INVITE"      = events mServ (Invite undefined) msg
-  | mCode msg == "KICK"        = events mServ (Kick undefined) msg
-  | mCode msg == "QUIT"        = events mServ (Quit undefined) msg
-  | mCode msg == "NICK"        = events mServ (Nick undefined) msg
-  | mCode msg == "NOTICE"      = events mServ (Notice undefined) msg
-  | B.all isNumber (mCode msg) = events mServ (Numeric undefined) msg
+callEvents mIrc msg
+  | mCode msg == "PRIVMSG"     = events mIrc (Privmsg undefined) msg
+  | mCode msg == "PING"        = events mIrc (Ping undefined) msg
+  | mCode msg == "JOIN"        = events mIrc (Join undefined) msg
+  | mCode msg == "PART"        = events mIrc (Part undefined) msg
+  | mCode msg == "MODE"        = events mIrc (Mode undefined) msg
+  | mCode msg == "TOPIC"       = events mIrc (Topic undefined) msg
+  | mCode msg == "INVITE"      = events mIrc (Invite undefined) msg
+  | mCode msg == "KICK"        = events mIrc (Kick undefined) msg
+  | mCode msg == "QUIT"        = events mIrc (Quit undefined) msg
+  | mCode msg == "NICK"        = events mIrc (Nick undefined) msg
+  | mCode msg == "NOTICE"      = events mIrc (Notice undefined) msg
+  | B.all isNumber (mCode msg) = events mIrc (Numeric undefined) msg
   | otherwise                  = return ()
 
 
@@ -420,8 +420,8 @@ eventFunc (Disconnect _) = error "SimpleIRC: unexpected event"
 
 -- |Sends a raw command to the server
 sendRaw :: MIrc -> B.ByteString -> IO ()
-sendRaw mServ msg = do
-  server <- readMVar mServ
+sendRaw mIrc msg = do
+  server <- readMVar mIrc
   write server msg
 
 -- |Sends a message to a channel
@@ -431,23 +431,23 @@ sendMsg :: MIrc
            -> B.ByteString -- ^ Channel
            -> B.ByteString -- ^ Message
            -> IO ()
-sendMsg mServ chan msg =
+sendMsg mIrc chan msg =
   mapM_ s lins
   where lins = B.lines msg
         s m = do
           now <- getCurrentTime
-          stamp <- getFloodControlTimestamp mServ
+          stamp <- getFloodControlTimestamp mIrc
           let latest = addUTCTime 2 $ max now stamp
               diff = diffUTCTime latest now
-          setFloodControlTimestamp mServ latest
+          setFloodControlTimestamp mIrc latest
           when (diff > 10) (threadDelay $ 1000000 * (round diff - 10))
-          sendCmd mServ (MPrivmsg chan m)
+          sendCmd mIrc (MPrivmsg chan m)
 
 
 sendCmd :: MIrc
            -> Command -- Command to send
            -> IO ()
-sendCmd mServ cmd = sendRaw mServ (showCommand cmd)
+sendCmd mIrc cmd = sendRaw mIrc (showCommand cmd)
 
 addEvent :: MIrc -> IrcEvent -> IO Unique
 addEvent mIrc event = do
