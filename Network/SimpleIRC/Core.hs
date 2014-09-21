@@ -314,29 +314,29 @@ pong server msg =
 trackChanges :: IrcServer -> IrcMessage -> IO IrcServer
 trackChanges server msg
   | code == "JOIN" = do
-    let nick = fromJust $ mNick msg
-        chan  = mMsg msg
-    if nick == sNickname server
-      then return server { sChannels = chan : sChannels server }
-      else return server
+      let nick = fromJust $ mNick msg
+          chan  = mMsg msg
+      if nick == sNickname server
+        then return server { sChannels = chan : sChannels server }
+        else return server
   | code == "NICK" = do
-    let nick    = fromJust $ mNick msg
-        newNick = mMsg msg
-    if nick == sNickname server
-      then return server { sNickname = newNick }
-      else return server
+      let nick    = fromJust $ mNick msg
+          newNick = mMsg msg
+      if nick == sNickname server
+        then return server { sNickname = newNick }
+        else return server
   | code == "KICK" = do
-    let nick = head $ fromJust $ mOther msg
-        chan = fromJust $ mChan msg
-    if nick == sNickname server
-      then return server { sChannels = delete chan (sChannels server) }
-      else return server
+      let nick = head $ fromJust $ mOther msg
+          chan = fromJust $ mChan msg
+      if nick == sNickname server
+        then return server { sChannels = delete chan (sChannels server) }
+        else return server
   | code == "PART" = do
-    let nick = fromJust $ mNick msg
-        chan = mMsg msg
-    if nick == sNickname server
-      then return server { sChannels = delete chan (sChannels server) }
-      else return server
+      let nick = fromJust $ mNick msg
+          chan = mMsg msg
+      if nick == sNickname server
+        then return server { sChannels = delete chan (sChannels server) }
+        else return server
   | otherwise = return server
   where code = mCode msg
 
@@ -344,18 +344,16 @@ trackChanges server msg
 ctcpHandler :: EventFunc
 ctcpHandler mServ iMsg
   | msg == "\x01VERSION\x01" = do
-    server <- readMVar mServ
-    sendCmd mServ
-      (MNotice origin ("\x01VERSION " `B.append`
-        B.pack (sCTCPVersion server) `B.append` "\x01"))
+      server <- readMVar mServ
+      sendCmd mServ
+        (MNotice origin ("\x01VERSION " `B.append`
+          B.pack (sCTCPVersion server) `B.append` "\x01"))
   | msg == "\x01TIME\x01" = do
-    server <- readMVar mServ
-    time <- sCTCPTime server
-    sendCmd mServ
-      (MNotice origin ("\x01TIME " `B.append` B.pack time `B.append` "\x01"))
-  | "\x01PING " `B.isPrefixOf` msg =
-    sendCmd mServ
-      (MNotice origin msg)
+      server <- readMVar mServ
+      time <- sCTCPTime server
+      sendCmd mServ
+        (MNotice origin ("\x01TIME " `B.append` B.pack time `B.append` "\x01"))
+  | "\x01PING " `B.isPrefixOf` msg = sendCmd mServ (MNotice origin msg)
   | otherwise = return ()
   where msg    = mMsg iMsg
         origin = fromJust $ mOrigin iMsg
@@ -372,31 +370,19 @@ events mServ event msg = do
 
 callEvents :: MIrc -> IrcMessage -> IO ()
 callEvents mServ msg
-  | mCode msg == "PRIVMSG"     =
-    events mServ (Privmsg undefined) msg
-  | mCode msg == "PING"        =
-    events mServ (Ping undefined) msg
-  | mCode msg == "JOIN"        =
-    events mServ (Join undefined) msg
-  | mCode msg == "PART"        =
-    events mServ (Part undefined) msg
-  | mCode msg == "MODE"        =
-    events mServ (Mode undefined) msg
-  | mCode msg == "TOPIC"       =
-    events mServ (Topic undefined) msg
-  | mCode msg == "INVITE"      =
-    events mServ (Invite undefined) msg
-  | mCode msg == "KICK"        =
-    events mServ (Kick undefined) msg
-  | mCode msg == "QUIT"        =
-    events mServ (Quit undefined) msg
-  | mCode msg == "NICK"        =
-    events mServ (Nick undefined) msg
-  | mCode msg == "NOTICE"      =
-    events mServ (Notice undefined) msg
-  | B.all isNumber (mCode msg) =
-    events mServ (Numeric undefined) msg
-  | otherwise                = return ()
+  | mCode msg == "PRIVMSG"     = events mServ (Privmsg undefined) msg
+  | mCode msg == "PING"        = events mServ (Ping undefined) msg
+  | mCode msg == "JOIN"        = events mServ (Join undefined) msg
+  | mCode msg == "PART"        = events mServ (Part undefined) msg
+  | mCode msg == "MODE"        = events mServ (Mode undefined) msg
+  | mCode msg == "TOPIC"       = events mServ (Topic undefined) msg
+  | mCode msg == "INVITE"      = events mServ (Invite undefined) msg
+  | mCode msg == "KICK"        = events mServ (Kick undefined) msg
+  | mCode msg == "QUIT"        = events mServ (Quit undefined) msg
+  | mCode msg == "NICK"        = events mServ (Nick undefined) msg
+  | mCode msg == "NOTICE"      = events mServ (Notice undefined) msg
+  | B.all isNumber (mCode msg) = events mServ (Numeric undefined) msg
+  | otherwise                  = return ()
 
 
 eqEvent :: IrcEvent -> IrcEvent -> Bool
