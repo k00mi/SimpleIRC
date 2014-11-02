@@ -180,33 +180,15 @@ disconnect server quitMsg = do
   return ()
 
 -- |Reconnects to the server.
-reconnect :: MIrc -> IO (Either IOError MIrc)
+reconnect :: MIrc -> IO (Either IOError ())
 reconnect mIrc = try $ do
-  server <- readMVar mIrc
-  h <- connectTo (B.unpack $ sAddr server) (PortNumber $ fromIntegral $ sPort server)
-  hSetBuffering h NoBuffering
-  modifyMVar_ mIrc (\s -> return $ s {sSock = Just h})
-  -- Initialize connection with the server
-  _ <- withMVar mIrc greetServer
-  -- Restart the listen loop.
-  listenId <- forkIO (listenLoop mIrc)
-  cmdId <- forkIO (execCmdsLoop mIrc)
-  modifyMVar_ mIrc (\s -> return $ s {sListenThread = Just listenId,
-                        sCmdThread = Just cmdId})
-  return mIrc
-
-{-
--- |Reconnects to the server.
-reconnect :: MIrc -> IO (Either IOError MIrc)
-reconnect server = do
-  s <- readMVar server
-
-  let conf = IrcConfig (B.unpack $ sAddr s) (sPort s)
-                       (B.unpack $ sNickname s) (B.unpack $ sUsername s)
-                       (B.unpack $ sRealname s) (map (B.unpack) (sChannels s))
-                       (elems $ sEvents s) (sCTCPVersion s) (sCTCPTime s)
-  connect conf True (sDebug s)
--}
+  modifyMVar_ mIrc $ \server -> do
+    debugWrite server "Reconnecting..."
+    h <- connectTo (B.unpack $ sAddr server)
+                   (PortNumber $ fromIntegral $ sPort server)
+    hSetBuffering h NoBuffering
+    greetServer (server {sSock = Just h})
+  listenLoop mIrc
 
 genUnique :: IrcEvent -> IO (Unique, IrcEvent)
 genUnique e = do
