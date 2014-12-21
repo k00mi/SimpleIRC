@@ -44,6 +44,7 @@ module Network.SimpleIRC.Core
 
 import Network
 import System.IO
+import System.IO.Error
 import Data.Maybe
 import Data.List (delete)
 import Data.Char (isNumber)
@@ -164,19 +165,25 @@ connect config threaded debug = try $ do
   -- Start the loops, listen and exec cmds
   if threaded
     then do listenId <- forkIO (listenLoop res)
-            _ <- forkIO (execCmdsLoop res)
-            modifyMVar_ res (\srv -> return $ srv {sListenThread = Just listenId})
+            cmdId <- forkIO (execCmdsLoop res)
+            modifyMVar_ res (\srv -> return $ srv {sListenThread = Just listenId
+                                                  ,sCmdThread = Just cmdId
+                                                  })
             return res
     else do listenLoop res
             return res
 
--- |Sends a QUIT command to the server.
+-- |Sends a QUIT command to the server and cleans up any resources
+-- associated with the connection.
 disconnect :: MIrc
               -> B.ByteString -- ^ Quit message
               -> IO ()
 disconnect server quitMsg = do
-  s <- readMVar server
+  s <- takeMVar server
   write s $ "QUIT :" `B.append` quitMsg
+  Foldable.for_ (sListenThread s) killThread
+  Foldable.for_ (sCmdThread s) killThread
+  Foldable.for_ (sSock s) (void . tryIOError . hClose)
   return ()
 
 -- |Reconnects to the server.
