@@ -100,7 +100,7 @@ data IrcServer = IrcServer
   , sListenThread :: Maybe ThreadId
   , sCmdThread    :: Maybe ThreadId
   , sCmdChan      :: Chan SIrcCommand
-  , sDebug        :: Bool
+  , sDebug        :: B.ByteString -> IO ()
   -- Other info
   , sCTCPVersion  :: String
   , sCTCPTime     :: IO String
@@ -149,11 +149,10 @@ type EventFunc = (MIrc -> IrcMessage -> IO ())
 -- |Connects to a server
 connect :: IrcConfig       -- ^ Configuration
            -> Bool         -- ^ Run in a new thread
-           -> Bool         -- ^ Print debug messages
+           -> (B.ByteString -> IO ())  -- ^ Print debug messages
            -> IO (Either IOError MIrc) -- ^ IrcServer instance
 connect config threaded debug = try $ do
-  when debug $
-    B.putStrLn $ "Connecting to " `B.append` B.pack (cAddr config)
+  debug $ B.pack $ "Connecting to " ++ cAddr config
   h <- connectTo (cAddr config) (PortNumber $ fromIntegral $ cPort config)
   hSetBuffering h NoBuffering
   cmdChan <- newChan
@@ -207,7 +206,8 @@ genUniqueMap evts = do
   uEvents <- mapM genUnique evts
   return $ Map.fromList uEvents
 
-toServer :: IrcConfig -> Handle -> Chan SIrcCommand -> Bool -> IO IrcServer
+toServer :: IrcConfig -> Handle -> Chan SIrcCommand -> (B.ByteString -> IO ())
+         -> IO IrcServer
 toServer config h cmdChan debug = do
   uniqueEvents <- genUniqueMap $ internalNormEvents ++ cEvents config
   now <- getCurrentTime
@@ -458,8 +458,7 @@ remEvent mIrc uniq = do
   writeChan (sCmdChan s) (SIrcRemoveEvent uniq)
 
 debugWrite :: IrcServer -> B.ByteString -> IO ()
-debugWrite s msg =
-  when (sDebug s) $ B.putStrLn msg
+debugWrite s = sDebug s
 
 write :: IrcServer -> B.ByteString -> IO ()
 write s msg = do
