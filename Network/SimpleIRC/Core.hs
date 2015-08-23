@@ -56,7 +56,6 @@ import Data.Unique
 import Control.Exception (try, catch, IOException)
 import System.Timeout
 import Data.Time
-import System.Locale
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Map as Map
 import qualified Data.Foldable as Foldable
